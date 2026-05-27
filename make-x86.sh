@@ -4,33 +4,45 @@ set -e
 echo "[+] Lade aktuelle Gentoo Minimal ISO (x86 32-Bit) herunter..."
 wget -O gentoo-minimal-x86.iso "https://distfiles.gentoo.org/releases/x86/autobuilds/current-install-x86-minimal/install-x86-minimal-20260505T170108Z.iso"
 
-echo "[+] Extrahiere nur das originale SquashFS aus der ISO..."
-xorriso -osirrox on -indev gentoo-minimal-x86.iso -extract /image.squashfs /tmp/image.squashfs
+echo "[+] Entpacke die ISO..."
+mkdir -p /tmp/iso-extract
+xorriso -osirrox on -indev gentoo-minimal-x86.iso -extract / /tmp/iso-extract
 
-echo "[+] Entpacke das SquashFS (mit sudo für saubere Device Nodes)..."
-# Dank sudo werden /dev/console und /dev/null korrekt erstellt, statt Fehler zu werfen
-sudo unsquashfs -d /tmp/squashfs-root /tmp/image.squashfs
+echo "[+] Entpacke das SquashFS (Das eigentliche Live-System)..."
+# Nutze sudo im GitHub-Runner, um /dev/console und /dev/null fehlerfrei zu erstellen
+sudo unsquashfs -d /tmp/squashfs-root /tmp/iso-extract/image.squashfs
 
 echo "[+] Injiziere den Installer..."
 sudo cp "$GITHUB_WORKSPACE/gentooinstall.sh" /tmp/squashfs-root/root/
 sudo chmod +x /tmp/squashfs-root/root/gentooinstall.sh
-
-# Zuverlässiges Anhängen an die .bashrc als root
 echo "echo 'Tippe ./gentooinstall.sh ein, um die Installation zu starten!'" | sudo tee -a /tmp/squashfs-root/root/.bashrc > /dev/null
 
 echo "[+] Packe das SquashFS wieder zusammen..."
-sudo mksquashfs /tmp/squashfs-root /tmp/new_image.squashfs -comp xz
+sudo rm -f /tmp/iso-extract/image.squashfs
+sudo mksquashfs /tmp/squashfs-root /tmp/iso-extract/image.squashfs -comp xz
 
-echo "[+] Erstelle die neue, bootfähige ISO via xorriso replay..."
-# Wir nehmen die originale ISO, löschen das alte SquashFS auf dem Image,
-# mappen das neue rein und clonen den originalen GRUB2-Bootloader exakt.
-xorriso -indev gentoo-minimal-x86.iso \
-  -outdev "$GITHUB_WORKSPACE/minimal-gentoo-with-installer-x86.iso" \
-  -rm /image.squashfs -- \
-  -map /tmp/new_image.squashfs /image.squashfs \
-  -boot_image any replay
+echo "[+] Suche GRUB2 Boot-Image für klassischen BIOS-Boot..."
+# Wir suchen dynamisch nach der eltorito.img von GRUB2
+BOOT_IMG=$(find /tmp/iso-extract -name "eltorito.img" -print -quit)
+if [ -z "$BOOT_IMG" ]; then
+    echo "[-] Fehler: eltorito.img wurde in der ISO nicht gefunden!"
+    exit 1
+fi
 
-echo "[+] Räume temporäre Sudo-Dateien auf..."
-sudo rm -rf /tmp/squashfs-root /tmp/image.squashfs /tmp/new_image.squashfs
+# Pfad relativ zum Extraktions-Verzeichnis umrechnen
+BOOT_REL=${BOOT_IMG#/tmp/iso-extract/}
+echo "[+] Gefundenes Boot-Image: $BOOT_REL"
 
-echo "[+] Fertig! Die hybride, bootfähige x86 ISO wurde erfolgreich erstellt."
+echo "[+] Erstelle die neue, bootfähige x86 ISO (Reines MBR / Klassisches BIOS)..."
+# -G extrahiert den originalen Bootcode aus dem System-Header der alten ISO (für Isohybrid/USB-Boot)
+# --grub2-boot-info teilt xorriso mit, dass es sich um den GRUB-Bootloader handelt
+xorriso -as mkisofs -r -J -joliet-long -l \
+  -b "$BOOT_REL" -no-emul-boot -boot-load-size 4 -boot-info-table \
+  --grub2-boot-info \
+  -G gentoo-minimal-x86.iso \
+  -o "$GITHUB_WORKSPACE/minimal-gentoo-with-installer-x86.iso" /tmp/iso-extract/
+
+echo "[+] Räume auf..."
+sudo rm -rf /tmp/squashfs-root /tmp/iso-extract
+
+echo "[+] Fertig! Die reine BIOS-32-Bit-ISO (nur MBR) wurde erfolgreich erstellt."
