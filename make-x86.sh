@@ -10,7 +10,7 @@ xorriso -osirrox on -indev gentoo-minimal-x86.iso -extract / /tmp/iso-extract
 
 echo "[+] Entpacke das SquashFS (Das eigentliche Live-System)..."
 cd /tmp/iso-extract
-unsquashfs -d /tmp/squashfs-root image.squashfs
+unsquashfs -force -d /tmp/squashfs-root image.squashfs || true
 
 echo "[+] Injiziere den Installer..."
 # Pfad korrigiert auf das aktuelle Arbeitsverzeichnis
