@@ -9,7 +9,7 @@ echo "[+] Extrahiere nur das SquashFS (Das eigentliche Live-System)..."
 xorriso -osirrox on -indev gentoo-minimal-x86.iso -extract /image.squashfs /tmp/image.squashfs
 
 echo "[+] Entpacke das SquashFS..."
-unsquashfs -d /tmp/squashfs-root /tmp/image.squashfs
+unsquashfs -force -d /tmp/squashfs-root image.squashfs || true
 
 echo "[+] Injiziere den Installer..."
 cp "$GITHUB_WORKSPACE/gentooinstall.sh" /tmp/squashfs-root/root/
