@@ -1,0 +1,34 @@
+name: Build Custom Gentoo ISO (x86)
+
+# Der Workflow startet manuell über den "Run workflow"-Button
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Holt den Code aus deinem Repository auf die VM
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 2. Installiert die benötigten Tools für die ISO-Erstellung
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xorriso squashfs-tools wget
+
+    # 3. Macht die Skripte ausführbar und startet den Build
+    - name: Run ISO Build Script
+      run: |
+        chmod +x ./make-x86.sh
+        chmod +x ./gentooinstall.sh
+        ./make-x86.sh
+
+    # 4. Lädt die fertige ISO hoch, damit du sie im Browser herunterladen kannst
+    - name: Upload ISO Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gentoo-custom-iso-x86
+        path: minimal-gentoo-with-installer-x86.iso
